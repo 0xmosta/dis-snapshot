@@ -15,4 +15,4 @@ then all the rewards calculated will be saved inside `rewardsByStakeAddress.json
 ## Script options 
 
 use `--debug` to log more info and other details inside the `debug` dir.
-use `--save` to save the snapshot files inside a `policy` dir, so they could be reused by later using the option `--local`, might be helpful when testing and you want to skip calling Kupo everytime which might take a while.
+use `--save` to save the snapshot files inside a `policy` dir, so they could be reused later using the option `--local`, might be helpful when testing and you want to skip calling Kupo everytime which might take a while.
