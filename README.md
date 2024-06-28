@@ -8,7 +8,7 @@ Make sure to have deno installed and your env vars set, the script is using Deme
 
 To execute
 ```
-deno run --allow-all main.ts
+deno run --allow-all snapshot.ts
 ```
 then all the rewards calculated will be saved inside `rewardsByStakeAddress.json`
 

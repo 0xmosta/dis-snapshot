@@ -1,12 +1,13 @@
-import { Lucid } from "https://deno.land/x/lucid/mod.ts"
-import { load } from "https://deno.land/std@0.224.0/dotenv/mod.ts";
-import { parseArgs } from "jsr:@std/cli/parse-args";
+import { Lucid } from "https://deno.land/x/lucid@0.10.7/mod.ts";
+import { parseArgs } from "@std/cli/parse-args";
+import { supabase } from "./db.ts";
+
+const isDenoDeploy = Deno.env.get("DENO_DEPLOYMENT_ID") !== undefined;
 
 const flags = parseArgs(Deno.args, {
   boolean: ["debug", "local", "save"],
 })
 
-const env = await load();
 const lucid = await Lucid.new(undefined, "Mainnet")
 
 const DISCO_NFT_POLICY_ID = 'd0112837f8f856b2ca14f69b375bc394e73d146fdadcc993bb993779'
@@ -60,8 +61,8 @@ const getPolicyAddressList = async (assetPolicy: string): Promise<any[]> => {
     const data = JSON.parse(Deno.readTextFileSync(`policy/${assetPolicy}.json`))
     return data
   }
-  const kupoUrl = env[`KUPO_URL`]
-  const dmtrApiKey = env[`DMTR_API_KEY`]
+  const kupoUrl = Deno.env.get(`KUPO_URL`)
+  const dmtrApiKey = Deno.env.get(`DMTR_API_KEY`)
 
   if (!kupoUrl || !dmtrApiKey) {
     throw new Error("Unable to get env vars")
@@ -95,7 +96,7 @@ const getPolicyAddressList = async (assetPolicy: string): Promise<any[]> => {
   }
 }
 
-const main = async () => {
+export const main = async () => {
   console.log("INFO: Starting snapshot")
 
   const assetTotals: { [policyId: string]: number } = {};
@@ -149,15 +150,18 @@ const main = async () => {
     console.log(`INFO: Found ${assetTotals[policyId]} assets (${policyId}) on ${Object.keys(assetTotalsByAddress).length} addresses`);
   }
 
-  try {
-    Deno.mkdirSync('debug')
-  } catch (error) {
-    if (error?.code !== "EEXIST") {
-      throw new Error("An error occurred while creating debug dir")
+  if (!isDenoDeploy) {
+    try {
+      Deno.mkdirSync('debug')
+    } catch (error) {
+      if (error?.code !== "EEXIST") {
+        throw new Error("An error occurred while creating debug dir")
+      }
     }
   }
 
-  if (flags.debug) {
+
+  if (flags.debug && !isDenoDeploy) {
     Deno.writeTextFileSync('debug/assetTotals.json', JSON.stringify(assetTotals, null, 2))
     Deno.writeTextFileSync('debug/assetTotalsByAddress.json', JSON.stringify(assetTotalsByAddress, null, 2))
   }
@@ -184,7 +188,7 @@ const main = async () => {
     }
   }
 
-  if (flags.debug) Deno.writeTextFileSync("debug/rewardsByAddress.json", JSON.stringify(rewardsByAddress, null, 2))
+  if (flags.debug && !isDenoDeploy) Deno.writeTextFileSync("debug/rewardsByAddress.json", JSON.stringify(rewardsByAddress, null, 2))
 
   for (const address of addressInfo) {
     const add = lucid.utils.getAddressDetails(address)
@@ -193,7 +197,30 @@ const main = async () => {
     rewardsByStakeAddress[sa] += parseFloat(rewardsByAddress[address].toFixed(8));
   }
 
-  Deno.writeTextFileSync('rewardsByStakeAddress.json', JSON.stringify(rewardsByStakeAddress, null, 2))
+  if (!isDenoDeploy) Deno.writeTextFileSync('rewardsByStakeAddress.json', JSON.stringify(rewardsByStakeAddress, null, 2))
+
+  const dbData: { stake: string, reward: number }[] = Object.entries(rewardsByStakeAddress).map(([key, value]) => {
+    return { stake: key, reward: parseFloat(value.toFixed(1)) }
+  })
+
+  const { error: dropError } = await supabase
+    .from(Deno.env.get(`DB_TABLE_REWARDS_BY_STAKE`)!)
+    .delete()
+    .neq(`stake`, 0)
+
+  if (dropError) {
+    console.error('ERROR: dropping table:', dropError);
+  }
+
+  const { data, error } = await supabase
+    .from(Deno.env.get(`DB_TABLE_REWARDS_BY_STAKE`)!)
+    .upsert(dbData);
+
+  if (error) {
+    console.error('ERROR: inserting data:', error);
+  } else {
+    console.log('INFO: Data inserted successfully:', data);
+  }
 
   console.log("INFO: Finished snapshot")
 }
