@@ -1,5 +1,10 @@
 {
   "tasks": {
-    "dev": "deno run --watch main.ts"
+    "start": "deno run --allow-all --env snapshot.ts",
+    "start:local": "deno run --allow-all --env snapshot.ts --local",
+    "dev": "deno run --watch --env snapshot.ts"
+  },
+  "imports": {
+    "@std/cli": "jsr:@std/cli@^0.224.7"
   }
 }
